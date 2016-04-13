@@ -22,15 +22,18 @@ oor = "-"
 
 if __name__ == '__main__':
     try:
-        fields = ([int(i) - 1  for i in argv[1::]] if len(argv) > 1
+        fields = ([int(i) - 1  for i in argv[1::]]
+                  if len(argv) > 1
                   else [-1])
         for f in fields:
             if fields < -1:
                 raise Exception("fields should be zero or positive")
         for row in reader(stdin):
             l = len(row)
-            print sep.join((row[f] if 0 <= f < l
-                            else (sep.join(row) if f == -1
+            print sep.join((row[f]
+                            if 0 <= f < l
+                            else (sep.join(row)
+                                  if f == -1
                                   else oor))
                            for f in fields)
     except Exception as e:
