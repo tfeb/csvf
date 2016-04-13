@@ -1,0 +1,39 @@
+#!/usr/bin/env python
+#
+# Cut fields from CSV files
+#
+#    csvf f1 f2 f3 < csvfile
+#
+# prints the fields of a csv file, separated by a space (or sep,
+# below).
+#
+# Field numbers start from 1: 0 is the whole row.  If you give no
+# fields it prints the whole row. Field numbers greater than the
+# length of the row are replaced by the out-of-range indicator which
+# is oor below, by default "-".
+#
+
+from sys import stdin, argv, exit
+from csv import reader
+
+# These should be command-line switches.
+sep = " "
+oor = "-"
+
+if __name__ == '__main__':
+    try:
+        fields = ([int(i) - 1  for i in argv[1::]] if len(argv) > 1
+                  else [-1])
+        for f in fields:
+            if fields < -1:
+                raise Exception("fields should be zero or positive")
+        for row in reader(stdin):
+            l = len(row)
+            print sep.join((row[f] if 0 <= f < l
+                            else (sep.join(row) if f == -1
+                                  else oor))
+                           for f in fields)
+    except Exception as e:
+        exit(e)
+else:
+    raise Exception("not a module")
