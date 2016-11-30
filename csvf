@@ -12,13 +12,24 @@
 # length of the row are replaced by the out-of-range indicator which
 # is oor below, by default "-".
 #
+# fmt (below) is a function which is applied to each element in
+# selected to format it.  It is deviously defined as the method of a
+# format string below: a more obvious definition might be
+#
+#  orf = "\"{0}\""
+#  def fmt(e):
+#      orf.format(e)
+#
+# which would make orf the thing you modified.
+#
 
 from sys import stdin, argv, exit
 from csv import reader
 
-# These should be command-line switches.
-sep = " "
-oor = "-"
+# These should be command-line switches, or derived from them
+sep = " "                       # separator
+oor = "-"                       # out of records indicator
+fmt = "\"{0}\"".format          # record formatter function
 
 if __name__ == '__main__':
     try:
@@ -30,9 +41,9 @@ if __name__ == '__main__':
                 raise Exception("fields should be zero or positive")
         for row in reader(stdin):
             l = len(row)
-            print sep.join((row[f]
+            print sep.join((fmt(row[f])
                             if 0 <= f < l
-                            else (sep.join(row)
+                            else (sep.join(fmt(e) for e in row)
                                   if f == -1
                                   else oor))
                            for f in fields)
