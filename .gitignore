@@ -1,0 +1,9 @@
+# Ignore emacs backups & auto save files
+*~
+\#*\#
+.\#*
+
+# Some directories
+scratch/
+tmp/
+worktree/
