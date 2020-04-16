@@ -2,51 +2,69 @@
 #
 # Cut fields from CSV files
 #
-#    csvf f1 f2 f3 < csvfile
+#    csvf [-s sep] [-m mri] [-f fmt] f ... < csvfile
 #
-# prints the fields of a csv file, separated by a space (or sep,
-# below).
+# prints the fields of a csv file.
 #
 # Field numbers start from 1: 0 is the whole row.  If you give no
-# fields it prints the whole row. Field numbers greater than the
-# length of the row are replaced by the out-of-range indicator which
-# is oor below, by default "-".
+# fields it prints the whole row.  Field numbers greater than the
+# length of the row are replaced by the missing record indicator which
+# is by default "-".  Fields are separated defaultly by " ".  The
+# format string which controls how fields are printed is defaultly
+# "\"{0}\"", which means they have quotes around them.  There are
+# options to control these.
 #
-# fmt (below) is a function which is applied to each element in
-# selected to format it.  It is deviously defined as the method of a
-# format string below: a more obvious definition might be
+# as an example
 #
-#  orf = "\"{0}\""
-#  def fmt(e):
-#      orf.format(e)
+#    csvf -s : -f '{0}' < ...
 #
-# which would make orf the thing you modified.
+# will print all the fields of the file, with colons separating them &
+# without quotes.
 #
 
 from sys import stdin, argv, exit
 from csv import reader
+from argparse import ArgumentParser
 
-# These should be command-line switches, or derived from them
-sep = " "                       # separator
-oor = "-"                       # out of records indicator
-fmt = "\"{0}\"".format          # record formatter function
+# Default values
+default_sep = " "               # separator
+default_mri = "-"               # missing record indicator
+default_fmt = "\"{0}\""         # record formatter function
 
 if __name__ == '__main__':
+    parser = ArgumentParser(description="print fields from  CSV file")
+    parser.add_argument("-s", "--separator",
+                        dest='sep', default=default_sep,
+                        help="The output separator, default '{}'"
+                        .format(default_sep))
+    parser.add_argument("-m", "--missing-record-indicator",
+                        dest='mri', default=default_mri,
+                        help="Printed for missing records, default '{}'"
+                        .format(default_mri))
+    parser.add_argument("-f", "--format-string",
+                        dest='fmt', default=default_fmt,
+                        help="Format string for records, default '{}'"
+                        .format(default_fmt))
+    parser.add_argument('fields',
+                        nargs='*', type=int, default=[0],
+                        help="The fields to print")
     try:
-        fields = ([int(i) - 1  for i in argv[1::]]
-                  if len(argv) > 1
-                  else [-1])
+        parsed = parser.parse_args()
+        sep = parsed.sep
+        mri = parsed.mri
+        fmt = parsed.fmt
+        fields = tuple(field -1 for field in parsed.fields)
         for f in fields:
-            if fields < -1:
+            if f < -1:
                 raise Exception("fields should be zero or positive")
         for row in reader(stdin):
             l = len(row)
-            print sep.join((fmt(row[f])
+            print(sep.join((fmt.format(row[f])
                             if 0 <= f < l
-                            else (sep.join(fmt(e) for e in row)
+                            else (sep.join(fmt.format(e) for e in row)
                                   if f == -1
-                                  else oor))
-                           for f in fields)
+                                  else mri))
+                           for f in fields))
     except Exception as e:
         exit(e)
 else:
