@@ -6,13 +6,13 @@
 #
 # prints the fields of a csv file.
 #
-# Field numbers start from 1: 0 is the whole row.  If you give no
-# fields it prints the whole row.  Field numbers greater than the
-# length of the row are replaced by the missing record indicator which
-# is by default "-".  Fields are separated defaultly by " ".  The
-# format string which controls how fields are printed is defaultly
-# "\"{0}\"", which means they have quotes around them.  There are
-# options to control these.
+# Field numbers start from 1: If you give no field specifications all
+# the fields are printed.  Field numbers greater than the length of
+# the row are replaced by the missing record indicator which is by
+# default "-".  Fields are separated defaultly by " ".  The format
+# string which controls how fields are printed is defaultly "\"{0}\"",
+# which means they have quotes around them.  There are options to
+# control these.
 #
 # as an example
 #
@@ -46,25 +46,28 @@ if __name__ == '__main__':
                         help="Format string for records, default '{}'"
                         .format(default_fmt))
     parser.add_argument('fields',
-                        nargs='*', type=int, default=[0],
+                        nargs='*', type=int, default=[],
                         help="The fields to print")
     try:
         parsed = parser.parse_args()
         sep = parsed.sep
         mri = parsed.mri
         fmt = parsed.fmt
-        fields = tuple(field -1 for field in parsed.fields)
-        for f in fields:
-            if f < -1:
-                raise Exception("fields should be zero or positive")
+        if len(parsed.fields) != 0:
+            fields = tuple(field -1 for field in parsed.fields)
+            for f in fields:
+                if f < 0:
+                    raise Exception("field numbers should be positive")
+        else:
+            fields = None
         for row in reader(stdin):
             l = len(row)
             print(sep.join((fmt.format(row[f])
                             if 0 <= f < l
-                            else (sep.join(fmt.format(e) for e in row)
-                                  if f == -1
-                                  else mri))
-                           for f in fields))
+                            else mri)
+                           for f in fields)
+                  if fields is not None
+                  else sep.join(fmt.format(e) for e in row))
     except Exception as e:
         exit(e)
 else:
