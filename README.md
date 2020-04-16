@@ -24,6 +24,8 @@ The output is *not* CSV!  Instead the output format is controlled by three optio
 - `-s sep` controls the separator between fields, which is defaultly a space character.
 - `-m mri` controls what is printed for a missing field – usually if you've tried to print a field beyond the end of the row.  By default it is `-`.
 - `-f fmt` controls how each field is printed.  This is a Python format string.  By default it is `"{0}"` which means there are double quotes around each field: you can change this by, for instance `csvf -f '{0}' ...` which will not print any quotes at all.
+- `-w` causes it to write CSV using Python's support for that.  In that case only the missing record indicator matters: everything else is dealt with by the CSV writer.
+- `-d dialect` sets the CSV dialect for both input & output.  See the Python `csv` module documentation for which dialects exist, but the default is usually fine.
 
 In addition you can *edit* the output in various ways.
 
@@ -61,6 +63,10 @@ $ csvf -s: -f '{0}' -e 2 '^ba' bi <foo.csv
 fish:bit:bone
 fish:dog:spot
 bird:cake:hoover
+$ csvf -w 1 2 <foo.csv
+fish,bat
+fish,dog
+bird,cake
 ```
 
 ## Notes

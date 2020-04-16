@@ -35,6 +35,12 @@
 # -f fmt sets the output format string, defaultly "\"{0}\"": This is a
 # Python format string.
 #
+# -w will cause it to write CSV.  In this case only the missing record
+# indicator matters: the rest is taken care of by the CSV writer.
+#
+# -d dialect sets the CSV dialect for both input & output.  The
+# default is usually fine
+#
 # -c f v will force field f to value v.
 #
 # -e f p r will, for field f, use p and r as regexp pattern &
@@ -58,8 +64,8 @@
 # rudimentary.
 #
 
-from sys import stdin, argv, exit
-from csv import reader
+from sys import stdin, stdout, argv, exit
+from csv import reader as csv_reader, writer as csv_writer
 from argparse import ArgumentParser
 from re import compile as re_compile
 
@@ -67,6 +73,7 @@ from re import compile as re_compile
 default_sep = " "               # separator
 default_mri = "-"               # missing record indicator
 default_fmt = "\"{0}\""         # record formatter function
+default_csv_dialect = 'excel'   # default dialect
 
 def main(arguments):
     # the program
@@ -99,6 +106,13 @@ def main(arguments):
                         default=[],
                         metavar=("FIELD", "STRING", "REPLACEMENT"),
                         help="Field replacement specifications")
+    parser.add_argument("-w", "--write-csv",
+                        dest='csvp', action='store_true',
+                        help="Write CSV output")
+    parser.add_argument("-d" "--dialect",
+                        dest='csv_dialect', default=default_csv_dialect,
+                        help="The CSV dialect, defaultly '{}'"
+                        .format(default_csv_dialect))
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
                         metavar="FIELD",
@@ -107,6 +121,8 @@ def main(arguments):
     sep = parsed.sep
     mri = parsed.mri
     fmt = parsed.fmt
+    csvp = parsed.csvp
+    csv_dialect=parsed.csv_dialect
     if len(parsed.fields) != 0:
         fields = tuple(field -1 for field in parsed.fields)
         for f in fields:
@@ -129,15 +145,19 @@ def main(arguments):
     for r in replacements:
         if r[0] < 0:
             raise Exception("replacement field numbers should be positive")
+
+    if csvp:
+        def writer(row):
+            csv_writer(stdout, dialect=csv_dialect).writerow(tuple(row))
+    else:
+        def writer(row):
+            print(sep.join(fmt.format(e) for e in row))
     for row in (rewrite_row(r, constants, edits, replacements)
-                for r in reader(stdin)):
+                for r in csv_reader(stdin, dialect=csv_dialect)):
         l = len(row)
-        print(sep.join((fmt.format(row[f])
-                        if 0 <= f < l
-                        else mri)
-                       for f in fields)
-              if fields is not None
-              else sep.join(fmt.format(e) for e in row))
+        writer(((row[f] if f < l else mri) for f in fields)
+                          if fields is not None
+                   else row)
 
 def rewrite_row(row, constants, edits, replacements):
     # Destructively rewrite the fields in a row according to
