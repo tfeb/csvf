@@ -19,11 +19,16 @@ $ csvf 1 3 < file.csv
 
 will print the first and third field from `file.csv`.  If you give it no field numbers it will print the entire row.
 
-The output is *not* CSV!  Instead the output format is controlled by three options.
+The input format is always CSV: you can control the dialect with the `-d` option below.  `csvf`'s understanding of CSV should be as good as that of the Python `csv` module which it uses.
+
+But unless you use `-w` (below) the output is *not* CSV!  Instead the output format is controlled by three options, and there is no fancy escaping of commas and quotes.
 
 - `-s sep` controls the separator between fields, which is defaultly a space character.
 - `-m mri` controls what is printed for a missing field – usually if you've tried to print a field beyond the end of the row.  By default it is `-`.
 - `-f fmt` controls how each field is printed.  This is a Python format string.  By default it is `"{0}"` which means there are double quotes around each field: you can change this by, for instance `csvf -f '{0}' ...` which will not print any quotes at all.
+
+But if you use `-w` then the output *is* CSV.
+
 - `-w` causes it to write CSV using Python's support for that.  In that case only the missing record indicator matters: everything else is dealt with by the CSV writer.
 - `-d dialect` sets the CSV dialect for both input & output.  See the Python `csv` module documentation for which dialects exist, but the default is usually fine.
 
