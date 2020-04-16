@@ -1,8 +1,12 @@
 #!/usr/bin/env python
 #
-# Cut fields from CSV files
+# * Cut fields from CSV files
 #
-#    csvf [-s sep] [-m mri] [-f fmt] f ... < csvfile
+#    csvf [-s sep] [-m mri] [-f fmt]
+#         [-c f v] ...
+#         [-e p r] ...
+#         [-r s r] ...
+#          field ... < csvfile
 #
 # prints the fields of a csv file.
 #
@@ -21,18 +25,53 @@
 # will print all the fields of the file, with colons separating them &
 # without quotes.
 #
+#
+# ** Options
+#
+# -s sep sets the separator string, defaultly a space.
+#
+# -m mri sets the missing record indicator, defaultly "-".
+#
+# -f fmt sets the output format string, defaultly "\"{0}\"": This is a
+# Python format string.
+#
+# -c f v will force field f to value v.
+#
+# -e f p r will, for field f, use p and r as regexp pattern &
+# -substitution.  -e is for 'edit'
+#
+# -r f s r will, if field f is the string s, replace it by r.  -r is
+# -for 'replace' and this is simpler than using regexps!
+#
+# the above three operations happen in that order: first fields are
+# forced to a constant value, then they are edited as regexps, finally
+# fixed string replacements happen.  I don't know if this order is
+# best, but that's what it is.
+#
+# Field editing operations don't work on missing fields, so you can't
+# extend rows by forcing fields to a constant.
+#
+#
+# ** Notes
+#
+# This is not particularly well-tested code.  Error handling is
+# rudimentary.
+#
 
 from sys import stdin, argv, exit
 from csv import reader
 from argparse import ArgumentParser
+from re import compile as re_compile
 
 # Default values
 default_sep = " "               # separator
 default_mri = "-"               # missing record indicator
 default_fmt = "\"{0}\""         # record formatter function
 
-if __name__ == '__main__':
-    parser = ArgumentParser(description="print fields from  CSV file")
+def main(arguments):
+    # the program
+    parser = ArgumentParser(
+        description="cut fields from a CSV file, with possible edits")
     parser.add_argument("-s", "--separator",
                         dest='sep', default=default_sep,
                         help="The output separator, default '{}'"
@@ -45,29 +84,84 @@ if __name__ == '__main__':
                         dest='fmt', default=default_fmt,
                         help="Format string for records, default '{}'"
                         .format(default_fmt))
+    parser.add_argument("-c", "--constants",
+                        nargs=2, dest='constants', action='append',
+                        default=[],
+                        metavar=("FIELD", "VALUE"),
+                        help="Constant field specifications")
+    parser.add_argument("-e", "--edits",
+                        nargs=3, dest='edits', action='append',
+                        default=[],
+                        metavar=("FIELD", "PATTERN", "REPLACEMENT"),
+                        help="Edit specifications (regexp replacements)")
+    parser.add_argument("-r", "--replacements",
+                        nargs=3, dest='replacements', action='append',
+                        default=[],
+                        metavar=("FIELD", "STRING", "REPLACEMENT"),
+                        help="Field replacement specifications")
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
+                        metavar="FIELD",
                         help="The fields to print")
+    parsed = parser.parse_args(arguments)
+    sep = parsed.sep
+    mri = parsed.mri
+    fmt = parsed.fmt
+    if len(parsed.fields) != 0:
+        fields = tuple(field -1 for field in parsed.fields)
+        for f in fields:
+            if f < 0:
+                raise Exception("field numbers should be positive")
+    else:
+        fields = None
+    constants = tuple((int(c[0]) -1, c[1])
+                      for c in parsed.constants)
+    for c in constants:
+        if c[0] < 0:
+            raise Exception("constant field numbers should be positive")
+    edits = tuple((int(e[0]) - 1, re_compile(e[1]), e[2])
+                  for e in parsed.edits)
+    for e in edits:
+        if e[0] < 0:
+            raise Exception("edit field numbers should be positive")
+    replacements = tuple((int(r[0]) - 1, r[1], r[2])
+                         for r in parsed.replacements)
+    for r in replacements:
+        if r[0] < 0:
+            raise Exception("replacement field numbers should be positive")
+    for row in (rewrite_row(r, constants, edits, replacements)
+                for r in reader(stdin)):
+        l = len(row)
+        print(sep.join((fmt.format(row[f])
+                        if 0 <= f < l
+                        else mri)
+                       for f in fields)
+              if fields is not None
+              else sep.join(fmt.format(e) for e in row))
+
+def rewrite_row(row, constants, edits, replacements):
+    # Destructively rewrite the fields in a row according to
+    # replacements & constants Note the order this happens: fields are
+    # first driven to constants, then edits are done, then fixed
+    # replacements are done.  I am not sure if this is the best order,
+    # but it seems reasonable.  This mutates row
+    l = len(row)
+    for (f, c) in constants:
+        if f < len(row):
+            row[f] = c
+    for (f, p, r) in edits:
+        if f < len(row):
+            row[f] = p.sub(r, row[f])
+    for (f, s, r) in replacements:
+        if f < len(row):
+            if row[f] == s:
+                row[f] = r
+    return row
+
+
+if __name__ == '__main__':
     try:
-        parsed = parser.parse_args()
-        sep = parsed.sep
-        mri = parsed.mri
-        fmt = parsed.fmt
-        if len(parsed.fields) != 0:
-            fields = tuple(field -1 for field in parsed.fields)
-            for f in fields:
-                if f < 0:
-                    raise Exception("field numbers should be positive")
-        else:
-            fields = None
-        for row in reader(stdin):
-            l = len(row)
-            print(sep.join((fmt.format(row[f])
-                            if 0 <= f < l
-                            else mri)
-                           for f in fields)
-                  if fields is not None
-                  else sep.join(fmt.format(e) for e in row))
+        main(argv[1::])
     except Exception as e:
         exit(e)
 else:
