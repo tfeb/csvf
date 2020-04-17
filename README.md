@@ -1,5 +1,5 @@
 # `csvf`
-This is a simple field extractor for CSV files, written in Python 2 (as it's quite old).
+The CSV Filter is a simple field extractor for CSV files, written in Python 2 (as it's quite old).
 
 Until recently this existed only as a gist, but since it's going to be souped up somewhat it is now a proper repo.
 
@@ -74,9 +74,43 @@ fish,dog
 bird,cake
 ```
 
+## Processor modules
+`csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-p module` option, which will cause `csvf` to dynamically import `module` when it runs. `-p` options can many times and all of the specified modules will be loaded.
+
+A processor module should contain a function called `process`: this function has one argument, the row (which will be a list or tuple) and should return either a row, or `None`.  If it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.
+
+Processor modules are imported in the usual way Python imports modules using `import`: this means that they can live anywhere on `PYTHONPATH`, but in practice the easiest thing is to simply have a Python (`.py`) file in the current directory.  One thing you *can't* do is to import modules by pathname, because that's slightly hard to do.  One side-effect of importing a module is that the Python file it corresponds to will get compiled, so for a processor module `foo.py` you will find `foo.pyc` after running `csvf -p foo ...`: those compiled files can be safely removed.
+
+Here is an example processor module, called `antifish.py`:
+
+```
+def process(row):
+    if len(row) >= 1 and row[0] == "fish":
+        return None
+    else:
+        return row
+```
+
+What this does is: check that the row has at least one element, and if it does check whether the first element is the string `"fish"`.  If it is, it rejects the row, otherwise it returns it.  Here is this in action:
+
+```
+$ ./csvf -w  < samples/foo.csv
+fish,bat,bone
+fish,dog,spot
+bird,cake,hoover
+$ ./csvf -w  -p antifish < samples/foo.csv
+bird,cake,hoover
+```
+
+As you can see, the rows whose first element is `"fish"` have been suppressed.
+
+Processor modules mean that you can perform completely arbitrary computations on and transformations of a row.
+
 ## Notes
-It makes no attempt to deal with fields that contain the output field separator or the no-field indicator.  If you want to extract fields which contain these the separator, then the way to do it is to extract them one at a time, so you know there is one field per line.  I don't think there's any way at all to detect missing fields reliably as it stands.
+`csvf` makes no attempt to deal with fields that contain the output field separator or the no-field indicator.  If you want to extract fields which contain these the separator, then the way to do it is to extract them one at a time, so you know there is one field per line.  I don't think there's any way at all to detect missing fields reliably as it stands.
 
 This is not particularly well-tested code.  Error handling is rudimentary.
 
 It should work in Python 2.7.  If you want it to work on 2.6 let me know (but it may be hard to backport now).
+
+In the future there may be a version which is much closer to a simple library for processing CSV files: it should be possible to specify filenames on the command line, and it should be possible to process many files.  However there are already existing programs which provide functionality like this, and making `csvf` too complicated would result in a not-as-good version of those systems rather than a small, simple tool: so that future version may never exist.

@@ -41,6 +41,13 @@
 # -d dialect sets the CSV dialect for both input & output.  The
 # default is usually fine
 #
+# -p module names a 'processor module' which is imported.  It should
+# have a function called 'process' which takes a row and returns
+# another row.  This option can be repeated, and the processors are
+# applied in order.  A processor can also return None which abort
+# processing of that row: no further processors will be called and
+# nothing will be printed.
+#
 # -c f v will force field f to value v.
 #
 # -e f p r will, for field f, use p and r as regexp pattern &
@@ -49,10 +56,10 @@
 # -r f s r will, if field f is the string s, replace it by r.  -r is
 # -for 'replace' and this is simpler than using regexps!
 #
-# the above three operations happen in that order: first fields are
-# forced to a constant value, then they are edited as regexps, finally
-# fixed string replacements happen.  I don't know if this order is
-# best, but that's what it is.
+# the above four operations happen in that order: rows are processed,
+# then fields are forced to a constant value, then they are edited as
+# regexps, finally fixed string replacements happen.  I don't know if
+# this order is best, but that's what it is.
 #
 # Field editing operations don't work on missing fields, so you can't
 # extend rows by forcing fields to a constant.
@@ -68,6 +75,7 @@ from sys import stdin, stdout, argv, exit
 from csv import reader as csv_reader, writer as csv_writer
 from argparse import ArgumentParser
 from re import compile as re_compile
+from importlib import import_module
 
 # Default values
 default_sep = " "               # separator
@@ -91,17 +99,17 @@ def main(arguments):
                         dest='fmt', default=default_fmt,
                         help="Format string for records, default '{}'"
                         .format(default_fmt))
-    parser.add_argument("-c", "--constants",
+    parser.add_argument("-c", "--constant",
                         nargs=2, dest='constants', action='append',
                         default=[],
                         metavar=("FIELD", "VALUE"),
                         help="Constant field specifications")
-    parser.add_argument("-e", "--edits",
+    parser.add_argument("-e", "--edit",
                         nargs=3, dest='edits', action='append',
                         default=[],
                         metavar=("FIELD", "PATTERN", "REPLACEMENT"),
                         help="Edit specifications (regexp replacements)")
-    parser.add_argument("-r", "--replacements",
+    parser.add_argument("-r", "--replacement",
                         nargs=3, dest='replacements', action='append',
                         default=[],
                         metavar=("FIELD", "STRING", "REPLACEMENT"),
@@ -113,6 +121,11 @@ def main(arguments):
                         dest='csv_dialect', default=default_csv_dialect,
                         help="The CSV dialect, defaultly '{}'"
                         .format(default_csv_dialect))
+    parser.add_argument("-p", "--processor-module",
+                        dest='processors', action='append',
+                        default=[],
+                        metavar="MODULE",
+                        help="Name of a module to process rows")
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
                         metavar="FIELD",
@@ -145,6 +158,7 @@ def main(arguments):
     for r in replacements:
         if r[0] < 0:
             raise Exception("replacement field numbers should be positive")
+    processors = tuple(import_module(m) for m in parsed.processors)
 
     if csvp:
         def writer(row):
@@ -152,20 +166,27 @@ def main(arguments):
     else:
         def writer(row):
             print(sep.join(fmt.format(e) for e in row))
-    for row in (rewrite_row(r, constants, edits, replacements)
+    for row in (rewrite_row(r, processors, constants, edits, replacements)
                 for r in csv_reader(stdin, dialect=csv_dialect)):
+        if row is None:
+            continue
         l = len(row)
         writer(((row[f] if f < l else mri) for f in fields)
                           if fields is not None
                    else row)
 
-def rewrite_row(row, constants, edits, replacements):
+def rewrite_row(row, processors, constants, edits, replacements):
     # Destructively rewrite the fields in a row according to
-    # replacements & constants Note the order this happens: fields are
-    # first driven to constants, then edits are done, then fixed
-    # replacements are done.  I am not sure if this is the best order,
-    # but it seems reasonable.  This mutates row
+    # processors, replacements, edits & constants Note the order this
+    # happens: rows are processed by all of the processors, then
+    # fields are first driven to constants, then edits are done, then
+    # fixed replacements are done.  I am not sure if this is the best
+    # order, but it seems reasonable.  This can mutate row.
     l = len(row)
+    for p in processors:
+        row = p.process(row)
+        if p is None:
+            return None
     for (f, c) in constants:
         if f < len(row):
             row[f] = c
