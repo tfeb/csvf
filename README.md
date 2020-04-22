@@ -1,7 +1,7 @@
 # `csvf`
 The CSV Filter is a simple field extractor for CSV files, written in Python 2 (as it's quite old).
 
-Until recently this existed only as a gist, but since it's going to be souped up somewhat it is now a proper repo.
+Until recently this existed only as a gist, but since it's now been souped up somewhat it is now a proper repo.
 
 ## What it can do
 It works as a filter, so you want to use it as
@@ -75,9 +75,11 @@ bird,cake
 ```
 
 ## Processor modules
-`csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-p module` option, which will cause `csvf` to dynamically import `module` when it runs. `-p` options can many times and all of the specified modules will be loaded.
+`csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-P module` option, which will cause `csvf` to dynamically import `module` when it runs. `-P` options can many times and all of the specified modules will be loaded.  `-A arg` options can be used to provide arguments to processor modules (see below).
 
-A processor module should contain a function called `process`: this function has one argument, the row (which will be a list or tuple) and should return either a row, or `None`.  If it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.
+A processor module should contain a function called `process`: this function has one argument, the row (which will be a list or tuple) and should return either a row, or `None`.  If it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.  Processing happens before any of the above processes.
+
+Additionally, processor modules can wrap their own code around the whole process.  This is done by Python's 'context manager' mechanism.  If a processor module contains a function called `enter`, this function will be called, with any arguments provided by `-A` options, before any work is done.  If it contains a function called `exit`, this will be called with three arguments after all processing is complete.  The three arguments it is called with will normally all be `None` but if any exception is raised they will be the type of the exception, its value, and a traceback object.  Apart from the extra arguments passed to the `enter` function, both of these functions are semantically simply the `__enter__` and `__exit__` functions of a context manager: see the Python documentation for the details of this.
 
 Processor modules are imported in the usual way Python imports modules using `import`: this means that they can live anywhere on `PYTHONPATH`, but in practice the easiest thing is to simply have a Python (`.py`) file in the current directory.  One thing you *can't* do is to import modules by pathname, because that's slightly hard to do.  One side-effect of importing a module is that the Python file it corresponds to will get compiled, so for a processor module `foo.py` you will find `foo.pyc` after running `csvf -p foo ...`: those compiled files can be safely removed.
 
@@ -98,11 +100,36 @@ $ ./csvf -w  < samples/foo.csv
 fish,bat,bone
 fish,dog,spot
 bird,cake,hoover
-$ ./csvf -w  -p antifish < samples/foo.csv
+$ ./csvf -w  -P antifish < samples/foo.csv
 bird,cake,hoover
 ```
 
 As you can see, the rows whose first element is `"fish"` have been suppressed.
+
+Here is a simple module called `trivial_cm.py`, which demonstrates the context manager features:
+
+```
+from __future__ import print_function
+from sys import stderr
+
+def enter(*args):
+    print("entering with {}".format(args), file=stderr)
+
+def exit(*vals):
+    print("exiting with {}".format(vals), file=stderr)
+    return None
+
+def process(row):
+    return row
+```
+
+Here this is in action:
+
+```
+$ ./csvf -w -P trivial_cm -A arg -A another < samples/foo.csv >/dev/null
+entering with ('arg', 'another')
+exiting with (None, None, None)
+```
 
 Processor modules mean that you can perform completely arbitrary computations on and transformations of a row.
 

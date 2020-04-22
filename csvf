@@ -41,13 +41,6 @@
 # -d dialect sets the CSV dialect for both input & output.  The
 # default is usually fine
 #
-# -p module names a 'processor module' which is imported.  It should
-# have a function called 'process' which takes a row and returns
-# another row.  This option can be repeated, and the processors are
-# applied in order.  A processor can also return None which abort
-# processing of that row: no further processors will be called and
-# nothing will be printed.
-#
 # -c f v will force field f to value v.
 #
 # -e f p r will, for field f, use p and r as regexp pattern &
@@ -56,13 +49,31 @@
 # -r f s r will, if field f is the string s, replace it by r.  -r is
 # -for 'replace' and this is simpler than using regexps!
 #
-# the above four operations happen in that order: rows are processed,
-# then fields are forced to a constant value, then they are edited as
-# regexps, finally fixed string replacements happen.  I don't know if
-# this order is best, but that's what it is.
+# the above operations happen in that order: fields are forced to
+# a constant value, then they are edited as regexps, finally fixed
+# string replacements happen.  I don't know if this order is best, but
+# that's what it is.
 #
 # Field editing operations don't work on missing fields, so you can't
 # extend rows by forcing fields to a constant.
+#
+#
+# Processor modules
+#
+# -P module names a 'processor module' which is imported.  It should
+# have a function called 'process' which takes a row and returns
+# another row.  This option can be repeated, and the processors are
+# applied in order.  A processor can also return None which abort
+# processing of that row: no further processors will be called and
+# nothing will be printed.  Processing happens before any other
+# operation.
+#
+# If a processor module contains a function called 'enter' this will
+# be called before any processing, with arguments provided with '-A'.
+# If it contains a function called 'exit' this will be called at the
+# end, in the same way that a context manager's '__exit__' function is
+# and with the same semantics.
+
 #
 #
 # ** Notes
@@ -71,6 +82,7 @@
 # rudimentary.
 #
 
+from __future__ import print_function
 from sys import stdin, stdout, argv, exit
 from csv import reader as csv_reader, writer as csv_writer
 from argparse import ArgumentParser
@@ -82,6 +94,22 @@ default_sep = " "               # separator
 default_mri = "-"               # missing record indicator
 default_fmt = "\"{0}\""         # record formatter function
 default_csv_dialect = 'excel'   # default dialect
+
+class PMManager(object):
+    # Wraps a processing module to provide a context manager
+    def __init__(self, processor_module, arguments):
+        self.processor_module = processor_module
+        self.arguments = arguments
+    def __enter__(self):
+        if hasattr(self.processor_module, 'enter'):
+            self.processor_module.enter(*self.arguments)
+    def __exit__(self, extype, exval, extb):
+        if hasattr(self.processor_module, 'exit'):
+            return self.processor_module.exit(extype, exval, extb)
+        else:
+            return None
+    def process(self, row):
+        return self.processor_module.process(row)
 
 def main(arguments):
     # the program
@@ -119,13 +147,19 @@ def main(arguments):
                         help="Write CSV output")
     parser.add_argument("-d" "--dialect",
                         dest='csv_dialect', default=default_csv_dialect,
+                        metavar="DIALECT",
                         help="The CSV dialect, defaultly '{}'"
                         .format(default_csv_dialect))
-    parser.add_argument("-p", "--processor-module",
+    parser.add_argument("-P", "--processor-module",
                         dest='processors', action='append',
                         default=[],
                         metavar="MODULE",
                         help="Name of a module to process rows")
+    parser.add_argument("-A", "--processor-argument",
+                        dest='processor_arguments', action='append',
+                        default=[],
+                        metavar="ARGUMENT",
+                        help="Arguments passed to processor modules")
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
                         metavar="FIELD",
@@ -135,7 +169,7 @@ def main(arguments):
     mri = parsed.mri
     fmt = parsed.fmt
     csvp = parsed.csvp
-    csv_dialect=parsed.csv_dialect
+    csv_dialect = parsed.csv_dialect
     if len(parsed.fields) != 0:
         fields = tuple(field -1 for field in parsed.fields)
         for f in fields:
@@ -158,23 +192,35 @@ def main(arguments):
     for r in replacements:
         if r[0] < 0:
             raise Exception("replacement field numbers should be positive")
-    processors = tuple(import_module(m) for m in parsed.processors)
+    # writer is a the function called to write a row.
+    writer = ((lambda row:
+               csv_writer(stdout, dialect=csv_dialect).writerow(tuple(row)))
+              if csvp
+              else (lambda row:
+                    print(sep.join(fmt.format(e) for e in row))))
+    processors = tuple(PMManager(import_module(m), parsed.processor_arguments)
+                       for m in parsed.processors)
 
-    if csvp:
-        def writer(row):
-            csv_writer(stdout, dialect=csv_dialect).writerow(tuple(row))
-    else:
-        def writer(row):
-            print(sep.join(fmt.format(e) for e in row))
-    for row in (rewrite_row(r, processors, constants, edits, replacements)
-                for r in csv_reader(stdin, dialect=csv_dialect)):
-        if row is None:
-            continue
-        l = len(row)
-        writer(((row[f] if f < l else mri) for f in fields)
-                          if fields is not None
-                   else row)
+    def run_with_managers(cm, nm):
+        # wrap suitable context managers around execution.  This
+        # should be a toplevel function, but it's too fiddly to do
+        # now.
+        if cm == nm:
+            for row in (rewrite_row(r, processors, constants,
+                                    edits, replacements)
+                        for r in csv_reader(stdin, dialect=csv_dialect)):
+                if row is None:
+                    continue
+                l = len(row)
+                writer(((row[f] if f < l else mri) for f in fields)
+                       if fields is not None
+                       else row)
+        else:
+            with processors[cm]:
+                run_with_managers(cm + 1, nm)
 
+    run_with_managers(0, len(processors))
+        
 def rewrite_row(row, processors, constants, edits, replacements):
     # Destructively rewrite the fields in a row according to
     # processors, replacements, edits & constants Note the order this
@@ -185,7 +231,7 @@ def rewrite_row(row, processors, constants, edits, replacements):
     l = len(row)
     for p in processors:
         row = p.process(row)
-        if p is None:
+        if row is None:
             return None
     for (f, c) in constants:
         if f < len(row):
