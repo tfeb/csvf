@@ -95,6 +95,8 @@ default_mri = "-"               # missing record indicator
 default_fmt = "\"{0}\""         # record formatter function
 default_csv_dialect = 'excel'   # default dialect
 
+debugging = False
+
 class PMManager(object):
     # Wraps a processing module to provide a context manager
     def __init__(self, processor_module, arguments):
@@ -113,6 +115,7 @@ class PMManager(object):
 
 def main(arguments):
     # the program
+    global debugging
     parser = ArgumentParser(
         description="cut fields from a CSV file, with possible edits")
     parser.add_argument("-s", "--separator",
@@ -160,11 +163,15 @@ def main(arguments):
                         default=[],
                         metavar="ARGUMENT",
                         help="Arguments passed to processor modules")
+    parser.add_argument("-D", "--debugging",
+                        dest='debugging', action='store_true',
+                        help="debug: don't catch errors, at least")
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
                         metavar="FIELD",
                         help="The fields to print")
     parsed = parser.parse_args(arguments)
+    debugging = parsed.debugging
     sep = parsed.sep
     mri = parsed.mri
     fmt = parsed.fmt
@@ -250,6 +257,9 @@ if __name__ == '__main__':
     try:
         main(argv[1::])
     except Exception as e:
-        exit(e)
+        if not debugging:
+            exit(e)
+        else:
+            raise
 else:
     raise Exception("not a module")
