@@ -133,11 +133,15 @@ exiting with (None, None, None)
 
 Processor modules mean that you can perform completely arbitrary computations on and transformations of a row.
 
+`samples/csv_replace.py` is an example processor module which will use auxilliary CSV files to drive replacements.
+
 ## Notes
+Samples and examples, including example processor modules, can be found in `samples/`.
+
 `csvf` makes no attempt to deal with fields that contain the output field separator or the no-field indicator.  If you want to extract fields which contain these the separator, then the way to do it is to extract them one at a time, so you know there is one field per line.  I don't think there's any way at all to detect missing fields reliably as it stands.
 
-This is not particularly well-tested code.  Error handling is rudimentary.
+This is not particularly well-tested code.  Error handling is fairly rudimentary.
 
-It should work in Python 2.7.  If you want it to work on 2.6 let me know (but it may be hard to backport now).
+It should work in Python 2.7.  If you want it to work on 2.6 let me know (but it may be hard to backport now).  It should be very easy to port to Python 3, simply using `2to3`.
 
 In the future there may be a version which is much closer to a simple library for processing CSV files: it should be possible to specify filenames on the command line, and it should be possible to process many files.  However there are already existing programs which provide functionality like this, and making `csvf` too complicated would result in a not-as-good version of those systems rather than a small, simple tool: so that future version may never exist.
