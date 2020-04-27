@@ -24,7 +24,7 @@ def validate_row(row, source):
 # A dictionary which will hold the replacements
 replacements = {}
 
-def enter(*replacements_files):
+def enter(*replacements_files, **junk):
     # called before processing by csvf.  This function expects the
     # names of zero or more replacements files which it will read,
     # check and set up replacements from.

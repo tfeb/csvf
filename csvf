@@ -1,8 +1,7 @@
 #!/usr/bin/env python
 #
 
-"""
-``csvf``: cut fields from CSV files
+"""``csvf``: cut fields from CSV files
 ===================================
 
 Usage
@@ -102,11 +101,14 @@ and may also contain functions called `enter` and `exit`.
    should return either another list, or `None`.  If it returns `None`
    then processing for that row stops and nothing is printed.
 
-.. function:: enter(*args)
+.. function:: enter(*args, **kwoptions)
 
-   If this function exists, it is called before any processing, with any
-   arguments specified by ``-A`` options (if none are specified, there will
-   be no arguments).  Its return value is ignored.
+   If this function exists, it is called before any processing, with
+   any arguments specified by ``-A`` options (if none are specified,
+   there will be no arguments).  Its return value is ignored.  The
+   keyword arguments to `enter` will include `reader` and `writer`
+   which are the CSV reader and writer functions: see below.  There
+   may in future be other options.
 
 .. function:: exit(exc_type, exc_value, exc_traceback)
 
@@ -115,6 +117,21 @@ and may also contain functions called `enter` and `exit`.
    If something went wrong it will be called with three values that describe
    the exception that happened.  See the documentation for `with` to
    understand what they are.
+
+The `reader` and `writer` options to the `enter` function are both
+functions:
+
+.. function:: reader(stream)
+
+   will return a function which will iterate over the rows of a CSV file
+   read from `stream`.
+
+.. function:: writer(stream)
+
+   will return a function which, when called with a row, will write it to
+   `stream` as CSV.
+
+Both of these functions respect the dialect option to ``csvf``.
 
 
 Notes
@@ -141,12 +158,13 @@ debugging = False
 
 class PMManager(object):
     """Wraps a processing module to provide a context manager"""
-    def __init__(self, processor_module, arguments):
+    def __init__(self, processor_module, arguments, **options):
         self.processor_module = processor_module
         self.arguments = arguments
+        self.options = options
     def __enter__(self):
         if hasattr(self.processor_module, 'enter'):
-            self.processor_module.enter(*self.arguments)
+            self.processor_module.enter(*self.arguments, **self.options)
     def __exit__(self, extype, exval, extb):
         if hasattr(self.processor_module, 'exit'):
             return self.processor_module.exit(extype, exval, extb)
@@ -237,9 +255,10 @@ def main(arguments):
             raise Exception("replacement field numbers should be positive")
     reader = (lambda stream:
               csv_reader(stream, dialect=csv_dialect))
-    writer = (lambda row, stream:
-              csv_writer(stream, dialect=csv_dialect).writerow(tuple(row)))
-    processors = tuple(PMManager(import_module(m), parsed.processor_arguments)
+    writer = (lambda stream:
+              csv_writer(stream, dialect=csv_dialect).writerow)
+    processors = tuple(PMManager(import_module(m), parsed.processor_arguments,
+                                 reader=reader, writer=writer)
                        for m in parsed.processors)
 
     def run_with_managers(cm, nm):
@@ -247,6 +266,7 @@ def main(arguments):
         # should be a toplevel function, but it's too fiddly to do
         # now.
         if cm == nm:
+            writerow = writer(stdout)
             for row in (rewrite_row(r, processors, constants,
                                     edits, replacements)
                         for r in reader(stdin)):
@@ -254,10 +274,10 @@ def main(arguments):
                     continue
                 l = len(row)
                 if output:
-                    writer(((row[f] if f < l else mri) for f in fields)
-                           if fields is not None
-                           else row,
-                           stdout)
+                    writerow(((row[f] if f < l else mri)
+                              for f in fields)
+                             if fields is not None
+                             else row)
         else:
             with processors[cm]:
                 run_with_managers(cm + 1, nm)
