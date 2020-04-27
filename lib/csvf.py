@@ -1,7 +1,8 @@
-#!/usr/bin/env python
+# csvf
 #
 
-"""``csvf``: cut fields from CSV files
+"""
+``csvf``: cut fields from CSV files
 ===================================
 
 Usage
@@ -149,6 +150,8 @@ from csv import reader as csv_reader, writer as csv_writer
 from argparse import ArgumentParser
 from re import compile as re_compile
 from importlib import import_module
+
+__all__ = ('main',)
 
 # Default values
 default_mri = "-"               # missing record indicator
@@ -322,5 +325,3 @@ if __name__ == '__main__':
             raise
     except KeyboardInterrupt as e:
         exit(128 + SIGINT)
-else:
-    raise Exception("not a module")

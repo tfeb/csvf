@@ -1,0 +1,15 @@
+#!/bin/sh -
+#
+
+CSVF="$(dirname $0)/../lib/csvf.py"
+PYTHON="${CSVF_PYTHON:-python}"
+
+die() {
+    echo "$@" 1>&2
+    exit 1
+}
+
+[ -f "$CSVF" ] || die "no $CSVF?"
+
+exec "$PYTHON" "$CSVF" "$@" || die "failed to exec python?"
+

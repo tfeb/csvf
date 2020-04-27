@@ -3,6 +3,14 @@ The CSV Filter is a simple field extractor for CSV files, written in Python 2 (a
 
 Until recently this existed only as a gist, but since it's now been souped up somewhat it is now a proper repo.
 
+## What is here
+The program you run is `bin/csvf`: it's a tiny shell script which expects to find `lib/csvf.py` in the right place, so if you copy one, copy the other, and preserve the directory structure: `bin/../lib/csvf.py` should be the right file.
+
+As well as these directories:
+
+- `samples/` contains some samples, both of Python code and CSV files.
+- `doc/` contains the probably-abandoned beginnings of a [Sphinx](https://www.sphinx-doc.org/)-based documentation generator.  There is no actual documentation there currently, but if you have sphinx you could perhaps try to make some.
+
 ## What it can do
 It works as a filter, so you want to use it as
 
@@ -78,9 +86,16 @@ burd,cake
 
 A processor module should contain a function called `process`: this function has one argument, the row (which will be a list or tuple) and should return either a row, or `None`.  If it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.  Processing happens before any of the above processes.
 
-Additionally, processor modules can wrap their own code around the whole process.  This is done by Python's 'context manager' mechanism.  If a processor module contains a function called `enter`, this function will be called, with any arguments provided by `-A` options, before any work is done.  If it contains a function called `exit`, this will be called with three arguments after all processing is complete.  The three arguments it is called with will normally all be `None` but if any exception is raised they will be the type of the exception, its value, and a traceback object.  Apart from the extra arguments passed to the `enter` function, both of these functions are semantically simply the `__enter__` and `__exit__` functions of a context manager: see the Python documentation for the details of this.
+Additionally, processor modules can wrap their own code around the whole process.  This is done by Python's 'context manager' mechanism.  If a processor module contains a function called `enter`, this function will be called, with any arguments provided by `-A` options, as well as some keyword arguments, before any work is done.  The keyword arguments will include at least:
 
-Processor modules are imported in the usual way Python imports modules using `import`: this means that they can live anywhere on `PYTHONPATH`, but in practice the easiest thing is to simply have a Python (`.py`) file in the current directory.  One thing you *can't* do is to import modules by pathname, because that's slightly hard to do.  One side-effect of importing a module is that the Python file it corresponds to will get compiled, so for a processor module `foo.py` you will find `foo.pyc` after running `csvf -p foo ...`: those compiled files can be safely removed.
+- `reader`, which is a function which, when called with a stream, will return a function which will iterate over the CSV file read from that stream;
+- `writer`, which is a function which, when called with a stream, will return a function which, when called with a row, will write that row to the stream as CSV.
+
+Both of these functions respect the selected CSV dialect.
+
+If a processor module contains a function called `exit`, this will be called with three arguments after all processing is complete.  The three arguments it is called with will normally all be `None` but if any exception is raised they will be the type of the exception, its value, and a traceback object.  Apart from the extra arguments passed to the `enter` function, both of these functions are semantically simply the `__enter__` and `__exit__` functions of a context manager: see the Python documentation for the details of this.
+
+Processor modules are imported in the usual way Python imports modules using `import`: this means that they can live anywhere on `PYTHONPATH`, but in practice the easiest thing is to simply have a Python (`.py`) file in the current directory.  One thing you *can't* do is to import modules by pathname, because that's slightly hard to do.  One side-effect of importing a module is that the Python file it corresponds to will get compiled, so for a processor module `foo.py` you will find `foo.pyc` after running `csvf -P foo ...`: those compiled files can be safely removed.
 
 Here is an example processor module, called `antifish.py`:
 
@@ -111,8 +126,8 @@ Here is a simple module called `trivial_cm.py`, which demonstrates the context m
 from __future__ import print_function
 from sys import stderr
 
-def enter(*args):
-    print("entering with {}".format(args), file=stderr)
+def enter(*args, **options):
+    print("entering with {} & {}".format(args, options), file=stderr)
 
 def exit(*vals):
     print("exiting with {}".format(vals), file=stderr)
@@ -125,8 +140,8 @@ def process(row):
 Here this is in action:
 
 ```
-$ csvf -P trivial_cm -A arg -A another < samples/foo.csv >/dev/null
-entering with ('arg', 'another')
+$ csvf -D -P trivial_cm < samples/foo.csv 
+entering with () & {'writer': <function <lambda> at 0x10aa53aa0>, 'reader': <function <lambda> at 0x10aa538c0>}
 exiting with (None, None, None)
 ```
 
@@ -135,9 +150,7 @@ Processor modules mean that you can perform completely arbitrary computations on
 `samples/csv_replace.py` is an example processor module which will use auxilliary CSV files to drive replacements.
 
 ## Notes
-Samples and examples, including example processor modules, can be found in `samples/`.
-
-`csvf` makes no attempt to deal with fields missing record indicator.
+`csvf` makes no attempt to deal with fields which are the same as the missing record indicator.
 
 This is not particularly well-tested code.  Error handling is fairly rudimentary.
 
