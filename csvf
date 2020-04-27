@@ -1,104 +1,146 @@
 #!/usr/bin/env python
 #
-# * Cut fields from CSV files
-#
-#    csvf [-s sep] [-m mri] [-f fmt]
-#         [-c f v] ...
-#         [-e p r] ...
-#         [-r s r] ...
-#          field ... < csvfile
-#
-# prints the fields of a csv file.
-#
-# Field numbers start from 1: If you give no field specifications all
-# the fields are printed.  Field numbers greater than the length of
-# the row are replaced by the missing record indicator which is by
-# default "-".  Fields are separated defaultly by " ".  The format
-# string which controls how fields are printed is defaultly "\"{0}\"",
-# which means they have quotes around them.  There are options to
-# control these.
-#
-# as an example
-#
-#    csvf -s : -f '{0}' < ...
-#
-# will print all the fields of the file, with colons separating them &
-# without quotes.
-#
-#
-# ** Options
-#
-# -s sep sets the separator string, defaultly a space.
-#
-# -m mri sets the missing record indicator, defaultly "-".
-#
-# -f fmt sets the output format string, defaultly "\"{0}\"": This is a
-# Python format string.
-#
-# -w will cause it to write CSV.  In this case only the missing record
-# indicator matters: the rest is taken care of by the CSV writer.
-#
-# -d dialect sets the CSV dialect for both input & output.  The
-# default is usually fine
-#
-# -c f v will force field f to value v.
-#
-# -e f p r will, for field f, use p and r as regexp pattern &
-# -substitution.  -e is for 'edit'
-#
-# -r f s r will, if field f is the string s, replace it by r.  -r is
-# -for 'replace' and this is simpler than using regexps!
-#
-# the above operations happen in that order: fields are forced to
-# a constant value, then they are edited as regexps, finally fixed
-# string replacements happen.  I don't know if this order is best, but
-# that's what it is.
-#
-# Field editing operations don't work on missing fields, so you can't
-# extend rows by forcing fields to a constant.
-#
-#
-# Processor modules
-#
-# -P module names a 'processor module' which is imported.  It should
-# have a function called 'process' which takes a row and returns
-# another row.  This option can be repeated, and the processors are
-# applied in order.  A processor can also return None which abort
-# processing of that row: no further processors will be called and
-# nothing will be printed.  Processing happens before any other
-# operation.
-#
-# If a processor module contains a function called 'enter' this will
-# be called before any processing, with arguments provided with '-A'.
-# If it contains a function called 'exit' this will be called at the
-# end, in the same way that a context manager's '__exit__' function is
-# and with the same semantics.
 
-#
-#
-# ** Notes
-#
-# This is not particularly well-tested code.  Error handling is
-# rudimentary.
-#
+"""
+``csvf``: cut fields from CSV files
+===================================
+
+Usage
+-----
+::
+
+    csvf [-m mri] [-n] [-D]
+         [-d dialect]
+         [-c f v] ...
+         [-e p r] ...
+         [-r s r] ...
+         [-P module] ...
+         [-A module-arg] ...
+         field ... < csvfile
+
+``csvf`` is a filter which prints the fields of a csv file, and can
+optionally process them with user-provided code.  Output is csv.
+
+The simplest usage is to select a number of fields::
+
+    csvf 1 2 3 < file.csv
+
+will print the first three fields from ``file.csv``.
+
+Field numbers start from 1: If you give no field specifications all
+the fields are printed (but see below).  Field numbers greater than
+the length of the row are replaced by the missing record indicator
+which is by default ``-``.
+
+
+Basic options
+-------------
+
+``-m  mri``
+    sets the missing record indicator, which is by default ``-``.
+
+``-n``
+    will suppress all normal output completely.
+    Processor modules can still write output.
+
+``-D``
+    may help you debug problems: in particular it stops ``csvf`` suppressing
+    backtraces on errors, which it does by default.
+
+``-d dialect``
+    sets the CSV dialect for both input & output.
+    The default is usually fine, but this should be something that
+    Python's 'csv' module understands.
+
+
+Field-editing options
+---------------------
+
+``-c f v``
+    will force field *f* to value *v*.  ``-c`` is for 'constant'.
+
+``-e f p r``
+    will, for field *f*, use *p* and *r* as regexp pattern &
+    substitution.  ``-e`` is for 'edit'.
+
+``-r f s r``
+    will, if field *f* is the string *s&, replace it by *r*.
+    ``-r`` is for 'replace' and this is simpler than using regexps!
+
+The above operations happen in that order: fields are forced to a
+constant value, then they are edited as regexps, finally fixed string
+replacements happen.  I don't know if this order is best, but that's
+what it is.
+
+Field editing operations don't work on missing fields, so you can't
+extend rows by forcing fields to a constant.
+
+
+Options for processor modules
+-----------------------------
+
+``-P module``
+    names a 'processor module' which is imported.  See below for details
+    on these.
+
+``-A arg``
+    passes arguments to processor modules.
+
+These options can be repeated for any number of processor modules.
+Processing happens before any other operation.
+
+Processor modules
+-----------------
+
+A processor module is simply a Python module which is imported in the
+normal way.  It should contain at least a function called `process`,
+and may also contain functions called `enter` and `exit`.
+
+.. function:: process(row)
+
+   called to process each row.  `row` is a list, and the function
+   should return either another list, or `None`.  If it returns `None`
+   then processing for that row stops and nothing is printed.
+
+.. function:: enter(*args)
+
+   If this function exists, it is called before any processing, with any
+   arguments specified by ``-A`` options (if none are specified, there will
+   be no arguments).  Its return value is ignored.
+
+.. function:: exit(exc_type, exc_value, exc_traceback)
+
+   If this function exists it is called after all processing is complete.
+   If everything is normal then it will be called with three `None` values.
+   If something went wrong it will be called with three values that describe
+   the exception that happened.  See the documentation for `with` to
+   understand what they are.
+
+
+Notes
+-----
+
+This is not particularly well-tested code.  Error handling is fairly
+rudimentary.
+
+"""
 
 from __future__ import print_function
-from sys import stdin, stdout, argv, exit
+from sys import stdin, stdout, stderr, argv, exit
+from signal import SIGINT
 from csv import reader as csv_reader, writer as csv_writer
 from argparse import ArgumentParser
 from re import compile as re_compile
 from importlib import import_module
 
 # Default values
-default_sep = " "               # separator
 default_mri = "-"               # missing record indicator
-default_fmt = "\"{0}\""         # record formatter function
 default_csv_dialect = 'excel'   # default dialect
 
 debugging = False
 
 class PMManager(object):
-    # Wraps a processing module to provide a context manager
+    """Wraps a processing module to provide a context manager"""
     def __init__(self, processor_module, arguments):
         self.processor_module = processor_module
         self.arguments = arguments
@@ -114,22 +156,24 @@ class PMManager(object):
         return self.processor_module.process(row)
 
 def main(arguments):
-    # the program
+    """The program
+
+    This is given all the commandline arguments except the program
+    name.
+    """
     global debugging
     parser = ArgumentParser(
         description="cut fields from a CSV file, with possible edits")
-    parser.add_argument("-s", "--separator",
-                        dest='sep', default=default_sep,
-                        help="The output separator, default '{}'"
-                        .format(default_sep))
     parser.add_argument("-m", "--missing-record-indicator",
                         dest='mri', default=default_mri,
                         help="Printed for missing records, default '{}'"
                         .format(default_mri))
-    parser.add_argument("-f", "--format-string",
-                        dest='fmt', default=default_fmt,
-                        help="Format string for records, default '{}'"
-                        .format(default_fmt))
+    parser.add_argument("-n", "--no-output",
+                        dest='output', action='store_false',
+                        help="Suppress output")
+    parser.add_argument("-D", "--debugging",
+                        dest='debugging', action='store_true',
+                        help="debug: don't catch errors, at least")
     parser.add_argument("-c", "--constant",
                         nargs=2, dest='constants', action='append',
                         default=[],
@@ -145,10 +189,7 @@ def main(arguments):
                         default=[],
                         metavar=("FIELD", "STRING", "REPLACEMENT"),
                         help="Field replacement specifications")
-    parser.add_argument("-w", "--write-csv",
-                        dest='csvp', action='store_true',
-                        help="Write CSV output")
-    parser.add_argument("-d" "--dialect",
+    parser.add_argument("-d", "--dialect",
                         dest='csv_dialect', default=default_csv_dialect,
                         metavar="DIALECT",
                         help="The CSV dialect, defaultly '{}'"
@@ -163,19 +204,14 @@ def main(arguments):
                         default=[],
                         metavar="ARGUMENT",
                         help="Arguments passed to processor modules")
-    parser.add_argument("-D", "--debugging",
-                        dest='debugging', action='store_true',
-                        help="debug: don't catch errors, at least")
     parser.add_argument('fields',
                         nargs='*', type=int, default=[],
                         metavar="FIELD",
                         help="The fields to print")
     parsed = parser.parse_args(arguments)
     debugging = parsed.debugging
-    sep = parsed.sep
     mri = parsed.mri
-    fmt = parsed.fmt
-    csvp = parsed.csvp
+    output = parsed.output
     csv_dialect = parsed.csv_dialect
     if len(parsed.fields) != 0:
         fields = tuple(field -1 for field in parsed.fields)
@@ -199,12 +235,10 @@ def main(arguments):
     for r in replacements:
         if r[0] < 0:
             raise Exception("replacement field numbers should be positive")
-    # writer is a the function called to write a row.
-    writer = ((lambda row:
-               csv_writer(stdout, dialect=csv_dialect).writerow(tuple(row)))
-              if csvp
-              else (lambda row:
-                    print(sep.join(fmt.format(e) for e in row))))
+    reader = (lambda stream:
+              csv_reader(stream, dialect=csv_dialect))
+    writer = (lambda row, stream:
+              csv_writer(stream, dialect=csv_dialect).writerow(tuple(row)))
     processors = tuple(PMManager(import_module(m), parsed.processor_arguments)
                        for m in parsed.processors)
 
@@ -215,13 +249,15 @@ def main(arguments):
         if cm == nm:
             for row in (rewrite_row(r, processors, constants,
                                     edits, replacements)
-                        for r in csv_reader(stdin, dialect=csv_dialect)):
+                        for r in reader(stdin)):
                 if row is None:
                     continue
                 l = len(row)
-                writer(((row[f] if f < l else mri) for f in fields)
-                       if fields is not None
-                       else row)
+                if output:
+                    writer(((row[f] if f < l else mri) for f in fields)
+                           if fields is not None
+                           else row,
+                           stdout)
         else:
             with processors[cm]:
                 run_with_managers(cm + 1, nm)
@@ -229,12 +265,15 @@ def main(arguments):
     run_with_managers(0, len(processors))
         
 def rewrite_row(row, processors, constants, edits, replacements):
-    # Destructively rewrite the fields in a row according to
-    # processors, replacements, edits & constants Note the order this
-    # happens: rows are processed by all of the processors, then
-    # fields are first driven to constants, then edits are done, then
-    # fixed replacements are done.  I am not sure if this is the best
-    # order, but it seems reasonable.  This can mutate row.
+    """Destructively rewrite the fields in a row
+
+    This rewrites `row` according to `processors`, `replacements`,
+    `edits` & `constants` Note the order this happens: rows are
+    processed by all of the processors, then fields are first driven
+    to constants, then edits are done, then fixed replacements are
+    done.  I am not sure if this is the best order, but it seems
+    reasonable.  This can mutate row.
+    """
     l = len(row)
     for p in processors:
         row = p.process(row)
@@ -261,5 +300,7 @@ if __name__ == '__main__':
             exit(e)
         else:
             raise
+    except KeyboardInterrupt as e:
+        exit(128 + SIGINT)
 else:
     raise Exception("not a module")

@@ -19,20 +19,19 @@ $ csvf 1 3 < file.csv
 
 will print the first and third field from `file.csv`.  If you give it no field numbers it will print the entire row.
 
-The input format is always CSV: you can control the dialect with the `-d` option below.  `csvf`'s understanding of CSV should be as good as that of the Python `csv` module which it uses.
+The input and output format is CSV.  `csvf`'s understanding of CSV should be as good as that of the Python `csv` module which it uses.
 
-But unless you use `-w` (below) the output is *not* CSV!  Instead the output format is controlled by three options, and there is no fancy escaping of commas and quotes.
+## Basic options
 
-- `-s sep` controls the separator between fields, which is defaultly a space character.
 - `-m mri` controls what is printed for a missing field – usually if you've tried to print a field beyond the end of the row.  By default it is `-`.
-- `-f fmt` controls how each field is printed.  This is a Python format string.  By default it is `"{0}"` which means there are double quotes around each field: you can change this by, for instance `csvf -f '{0}' ...` which will not print any quotes at all.
+- `-n` will suppress all normal output completely.  Processor modules can still write output.
+- `-D` may help you debug problems: in particular it stops `csvf` suppressing backtraces on errors, which it does by default.
 
-But if you use `-w` then the output *is* CSV.
+- `-d dialect` sets the CSV dialect for both input & output.
+    The default is usually fine, but this should be something that Python's 'csv' module understands.
 
-- `-w` causes it to write CSV using Python's support for that.  In that case only the missing record indicator matters: everything else is dealt with by the CSV writer.
-- `-d dialect` sets the CSV dialect for both input & output.  See the Python `csv` module documentation for which dialects exist, but the default is usually fine.
-
-In addition you can *edit* the output in various ways.
+## Field-editing options
+You can *edit* the output in various ways.
 
 - `-c f v` will force field `f` to be the string `v`.
 - `-e f p r` will, for field `f`, do a regular expression replacement of `p` by `r`.  This is the hairiest editing option.
@@ -41,7 +40,7 @@ In addition you can *edit* the output in various ways.
 All of these options can be specified as many times as you like.  The operations take place in that order: fields are set to constants, then regular expressions are replaced, then fixed strings are replaced.  There is only one pass, so you can't do clever trickery like replacing regular expressions with patterns that other regular expressions will match.  The operations only work on non-missing fields: you can't extend rows by forcing fields to be a constant.
 
 ## Examples
-Given this CSV file, `foo.csv`:
+Given this CSV file, `samples/foo.csv`:
 
 ```
 fish,bat,bone
@@ -52,26 +51,26 @@ bird,cake,hoover
 Then
 
 ```
-$ csvf <foo.csv
-"fish" "bat" "bone"
-"fish" "dog" "spot"
-"bird" "cake" "hoover"
-$ csvf -s: -f '{0}' <foo.csv
-fish:bat:bone
-fish:dog:spot
-bird:cake:hoover
-$ csvf -s: -f '{0}' -r 1 fish bat <foo.csv
-bat:bat:bone
-bat:dog:spot
-bird:cake:hoover
-$ csvf -s: -f '{0}' -e 2 '^ba' bi <foo.csv
-fish:bit:bone
-fish:dog:spot
-bird:cake:hoover
-$ csvf -w 1 2 <foo.csv
+$ csvf < samples/foo.csv
+fish,bat,bone
+fish,dog,spot
+bird,cake,hoover
+$ csvf 1 2 < samples/foo.csv
 fish,bat
 fish,dog
 bird,cake
+$ csvf -c 2 bat 1 2 < samples/foo.csv
+fish,bat
+fish,bat
+bird,bat
+$ csvf -r 1 bird fish < samples/foo.csv
+fish,bat,bone
+fish,dog,spot
+fish,cake,hoover
+$ csvf -e 1 i u -e 2 '^.' 'c' 1 2 < samples/foo.csv
+fush,cat
+fush,cog
+burd,cake
 ```
 
 ## Processor modules
@@ -96,11 +95,11 @@ def process(row):
 What this does is: check that the row has at least one element, and if it does check whether the first element is the string `"fish"`.  If it is, it rejects the row, otherwise it returns it.  Here is this in action:
 
 ```
-$ ./csvf -w  < samples/foo.csv
+$ csvf < samples/foo.csv
 fish,bat,bone
 fish,dog,spot
 bird,cake,hoover
-$ ./csvf -w  -P antifish < samples/foo.csv
+$ ./csvf -P antifish < samples/foo.csv
 bird,cake,hoover
 ```
 
@@ -126,7 +125,7 @@ def process(row):
 Here this is in action:
 
 ```
-$ ./csvf -w -P trivial_cm -A arg -A another < samples/foo.csv >/dev/null
+$ csvf -P trivial_cm -A arg -A another < samples/foo.csv >/dev/null
 entering with ('arg', 'another')
 exiting with (None, None, None)
 ```
@@ -138,7 +137,7 @@ Processor modules mean that you can perform completely arbitrary computations on
 ## Notes
 Samples and examples, including example processor modules, can be found in `samples/`.
 
-`csvf` makes no attempt to deal with fields that contain the output field separator or the no-field indicator.  If you want to extract fields which contain these the separator, then the way to do it is to extract them one at a time, so you know there is one field per line.  I don't think there's any way at all to detect missing fields reliably as it stands.
+`csvf` makes no attempt to deal with fields missing record indicator.
 
 This is not particularly well-tested code.  Error handling is fairly rudimentary.
 
