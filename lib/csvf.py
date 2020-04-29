@@ -277,8 +277,8 @@ def main(arguments):
                     continue
                 l = len(row)
                 if output:
-                    writerow(((row[f] if f < l else mri)
-                              for f in fields)
+                    writerow(tuple((row[f] if f < l else mri)
+                                   for f in fields)
                              if fields is not None
                              else row)
         else:

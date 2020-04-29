@@ -3,6 +3,9 @@
 \#*\#
 .\#*
 
+# eunectes control
+.eunectes
+
 # Python compiled files
 *.pyc
 
