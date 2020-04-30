@@ -96,7 +96,7 @@ A processor module is simply a Python module which is imported in the
 normal way.  It should contain at least a function called `process`,
 and may also contain functions called `enter` and `exit`.
 
-.. function:: process(row)
+.. function:: process(row, **kwoptions)
 
    called to process each row.  `row` is a list, and the function
    should return either another list, or `None`.  If it returns `None`
@@ -106,12 +106,9 @@ and may also contain functions called `enter` and `exit`.
 
    If this function exists, it is called before any processing, with
    any arguments specified by ``-A`` options (if none are specified,
-   there will be no arguments).  Its return value is ignored.  The
-   keyword arguments to `enter` will include `reader` and `writer`
-   which are the CSV reader and writer functions: see below.  There
-   may in future be other options.
+   there will be no arguments).  Its return value is ignored.
 
-.. function:: exit(exc_type, exc_value, exc_traceback)
+.. function:: exit(exc_type, exc_value, exc_traceback, **kwoptions)
 
    If this function exists it is called after all processing is complete.
    If everything is normal then it will be called with three `None` values.
@@ -119,8 +116,8 @@ and may also contain functions called `enter` and `exit`.
    the exception that happened.  See the documentation for `with` to
    understand what they are.
 
-The `reader` and `writer` options to the `enter` function are both
-functions:
+For the three functions above, `kwoptions` will include at least
+`reader` and `writer` options, whose values will both be functions:
 
 .. function:: reader(stream)
 
@@ -133,6 +130,8 @@ functions:
    `stream` as CSV.
 
 Both of these functions respect the dialect option to ``csvf``.
+
+There may in future be other options.
 
 
 Notes
@@ -170,11 +169,12 @@ class PMManager(object):
             self.processor_module.enter(*self.arguments, **self.options)
     def __exit__(self, extype, exval, extb):
         if hasattr(self.processor_module, 'exit'):
-            return self.processor_module.exit(extype, exval, extb)
+            return self.processor_module.exit(extype, exval, extb,
+                                              **self.options)
         else:
             return None
     def process(self, row):
-        return self.processor_module.process(row)
+        return self.processor_module.process(row, **self.options)
 
 def main(arguments):
     """The program

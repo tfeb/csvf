@@ -84,23 +84,27 @@ burd,cake
 ## Processor modules
 `csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-P module` option, which will cause `csvf` to dynamically import `module` when it runs. `-P` options can many times and all of the specified modules will be loaded.  `-A arg` options can be used to provide arguments to processor modules (see below).
 
-A processor module should contain a function called `process`: this function has one argument, the row (which will be a list or tuple) and should return either a row, or `None`.  If it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.  Processing happens before any of the above processes.
+A processor module should contain a function called `process`: this function has one positional argument and some keyword arguments.  The positional argument is the row (which will be a list or tuple), for the keyword arguments see below.  The function should return either a row, or `None`: if it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.  Processing happens before any of the built-in editing processes.
 
-Additionally, processor modules can wrap their own code around the whole process.  This is done by Python's 'context manager' mechanism.  If a processor module contains a function called `enter`, this function will be called, with any arguments provided by `-A` options, as well as some keyword arguments, before any work is done.  The keyword arguments will include at least:
+Additionally, processor modules can wrap their own code around the whole process.  This is done by Python's 'context manager' mechanism.  If a processor module contains a function called `enter` then this function will be called, with any arguments provided by `-A` options, as well as some keyword arguments (see below), before any work is done.
+
+If a processor module contains a function called `exit`, this will be called with three arguments and some keyword arguments (see below) after all processing is complete.  The three arguments it is called with will normally all be `None` but if any exception is raised they will be the type of the exception, its value, and a traceback object.
+
+Apart from the extra arguments passed, the `enter` and `exit` functions are semantically simply the `__enter__` and `__exit__` functions of a context manager: see the Python documentation for the details of this.
+
+The keyword arguments passed to the above functions are all the same, and will include at least:
 
 - `reader`, which is a function which, when called with a stream, will return a function which will iterate over the CSV file read from that stream;
 - `writer`, which is a function which, when called with a stream, will return a function which, when called with a row, will write that row to the stream as CSV.
 
-Both of these functions respect the selected CSV dialect.
-
-If a processor module contains a function called `exit`, this will be called with three arguments after all processing is complete.  The three arguments it is called with will normally all be `None` but if any exception is raised they will be the type of the exception, its value, and a traceback object.  Apart from the extra arguments passed to the `enter` function, both of these functions are semantically simply the `__enter__` and `__exit__` functions of a context manager: see the Python documentation for the details of this.
+Both of these functions respect the selected CSV dialect, and they mean that processor modules can read & generate CSV without needing to talk to the `csv` module themselves.
 
 Processor modules are imported in the usual way Python imports modules using `import`: this means that they can live anywhere on `PYTHONPATH`, but in practice the easiest thing is to simply have a Python (`.py`) file in the current directory.  One thing you *can't* do is to import modules by pathname, because that's slightly hard to do.  One side-effect of importing a module is that the Python file it corresponds to will get compiled, so for a processor module `foo.py` you will find `foo.pyc` after running `csvf -P foo ...`: those compiled files can be safely removed.
 
 Here is an example processor module, called `antifish.py`:
 
 ```
-def process(row):
+def process(row, **options):
     if len(row) >= 1 and row[0] == "fish":
         return None
     else:
@@ -127,22 +131,28 @@ from __future__ import print_function
 from sys import stderr
 
 def enter(*args, **options):
-    print("entering with {} & {}".format(args, options), file=stderr)
+    print("entering with {}, options {}".format(args, options),
+          file=stderr)
 
-def exit(*vals):
-    print("exiting with {}".format(vals), file=stderr)
+def exit(extype, exval, exb, **options):
+    print("exiting with {}, {}, {} & options {}"
+          .format(extype, exval, exb, options),
+          file=stderr
     return None
 
-def process(row):
+def process(row, **options):
     return row
 ```
 
 Here this is in action:
 
 ```
-$ csvf -D -P trivial_cm < samples/foo.csv 
-entering with () & {'writer': <function <lambda> at 0x10aa53aa0>, 'reader': <function <lambda> at 0x10aa538c0>}
-exiting with (None, None, None)
+$ csvf -D -P trivial_cm < samples/foo.csv
+entering with (), options {'writer': <function <lambda> at 0x10be9faa0>, 'reader': <function <lambda> at 0x10be9f8c0>}
+fish,bat,bone
+fish,dog,spot
+bird,cake,hoover
+exiting with None, None, None & options {'writer': <function <lambda> at 0x10be9faa0>, 'reader': <function <lambda> at 0x10be9f8c0>}
 ```
 
 Processor modules mean that you can perform completely arbitrary computations on and transformations of a row.

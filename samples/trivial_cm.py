@@ -4,11 +4,14 @@ from __future__ import print_function
 from sys import stderr
 
 def enter(*args, **options):
-    print("entering with {} & {}".format(args, options), file=stderr)
+    print("entering with {}, options {}".format(args, options),
+          file=stderr)
 
-def exit(*vals):
-    print("exiting with {}".format(vals), file=stderr)
+def exit(extype, exval, exb, **options):
+    print("exiting with {}, {}, {} & options {}"
+          .format(extype, exval, exb, options),
+          file=stderr)
     return None
 
-def process(row):
+def process(row, **options):
     return row
