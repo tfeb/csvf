@@ -262,7 +262,12 @@ def main(arguments):
               csv_writer(stream, dialect=csv_dialect).writerow)
     processors = tuple(PMManager(import_module(m), parsed.processor_arguments,
                                  reader=reader, writer=writer)
-                       for m in parsed.processors)
+                       for m in ((p[0:-3]
+                                  if p.endswith(".py")
+                                  else (p[0:-4]
+                                        if p.endswith(".pyc")
+                                        else p))
+                                 for p in parsed.processors))
 
     def run_with_managers(cm, nm):
         # wrap suitable context managers around execution.  This
