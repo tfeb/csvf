@@ -6,7 +6,9 @@ Until recently this existed only as a gist, but since it's now been souped up so
 ## What is here
 The program you run is `bin/csvf`: it's a tiny shell script which expects to find `lib/csvf.py` in the right place, so if you copy one, copy the other, and preserve the directory structure: `bin/../lib/csvf.py` should be the right file.
 
-As well as these directories:
+**Important note.** If the `PYTHONPATH` environment module is not set, then `bin/csvf` will set it to `.`, which means that processor modules will be looked for in the directory from which the script is invoked, as well as next to `lib/csvf.py` and along the default search path.  This is usually what you want, but does mean that you could subvert standard modules by putting bogus copies in the current directory.  If `PYTHONPATH` *is* set, it won't prepend or append `.` however.
+
+As well as the `bin` and `lib` directories:
 
 - `samples/` contains some samples, both of Python code and CSV files.
 - `doc/` contains the probably-abandoned beginnings of a [Sphinx](https://www.sphinx-doc.org/)-based documentation generator.  There is no actual documentation there currently, but if you have sphinx you could perhaps try to make some.
@@ -82,7 +84,7 @@ burd,cake
 ```
 
 ## Processor modules
-`csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-P module` option, which will cause `csvf` to dynamically import `module` when it runs. `-P` options can many times and all of the specified modules will be loaded.  `-A arg` options can be used to provide arguments to processor modules (see below).
+`csvf` has one more feature: you can specify Python code that you write which gets to process rows.  This is done by the `-P module` option, which will cause `csvf` to dynamically import `module` when it runs.  Any `.py` or `.pyc` suffix is stripped from `module`'s name, so it works to say `-P foo.py` if `foo.py` is in the current directory: this helps with shell completion.  `-P` options can be repeated many times and all of the specified modules will be loaded.  `-A arg` options can be used to provide arguments to processor modules (see below).
 
 A processor module should contain a function called `process`: this function has one positional argument and some keyword arguments.  The positional argument is the row (which will be a list or tuple), for the keyword arguments see below.  The function should return either a row, or `None`: if it returns a row, then that is used by later stages of the program, including any later processor modules.  If it returns `None` no further processing is done and the row is not printed.  Processing happens before any of the built-in editing processes.
 

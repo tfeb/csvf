@@ -80,8 +80,10 @@ Options for processor modules
 -----------------------------
 
 ``-P module``
-    names a 'processor module' which is imported.  See below for details
-    on these.
+    names a 'processor module' which is imported.  See below for
+    details on these.  Any ``.py`` or `.pyc` extensions are removed
+    before trying to import the module, which makes it more friendly
+    for shell completion for modules in the current directory
 
 ``-A arg``
     passes arguments to processor modules.

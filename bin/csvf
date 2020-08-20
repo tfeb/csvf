@@ -11,5 +11,4 @@ die() {
 
 [ -f "$CSVF" ] || die "no $CSVF?"
 
-exec "$PYTHON" "$CSVF" "$@" || die "failed to exec python?"
-
+PYTHONPATH="${PYTHONPATH:-.}" exec "$PYTHON" "$CSVF" "$@" || die "failed to exec python?"
